@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import readline from "node:readline";
-import type { ModelBreakdown, SessionUsage, ShutdownUsage, TokenDetails } from "./types.js";
+import type {
+  ModelBreakdown,
+  SessionUsage,
+  ShutdownUsage,
+  TokenDetails,
+} from "./types.js";
 
 const NANO_AIU_PER_CREDIT = 1_000_000_000;
 
-
-export async function parseSessionUsage(eventsJsonlPath: string): Promise<SessionUsage> {
+export async function parseSessionUsage(
+  eventsJsonlPath: string
+): Promise<SessionUsage> {
   const shutdowns: ShutdownUsage[] = [];
 
   const stream = fs.createReadStream(eventsJsonlPath, { encoding: "utf8" });
@@ -19,8 +25,9 @@ export async function parseSessionUsage(eventsJsonlPath: string): Promise<Sessio
   for await (const line of rl) {
     lineNumber++;
 
-    // Büyük dosyalarda önce ucuz string filtresi.
-    if (!line.includes('"type":"session.shutdown"')) {
+    const shutdownTypePattern = /"type"\s*:\s*"session\.shutdown"/;
+
+    if (!shutdownTypePattern.test(line)) {
       continue;
     }
 
@@ -40,7 +47,9 @@ export async function parseSessionUsage(eventsJsonlPath: string): Promise<Sessio
     shutdowns.push(shutdown);
   }
 
-  const billableShutdowns = shutdowns.filter((shutdown) => shutdown.nanoAiu > 0);
+  const billableShutdowns = shutdowns.filter(
+    (shutdown) => shutdown.nanoAiu > 0
+  );
 
   return {
     shutdowns,
@@ -53,7 +62,10 @@ export async function parseSessionUsage(eventsJsonlPath: string): Promise<Sessio
   };
 }
 
-function parseShutdownEvent(event: Record<string, unknown>, lineNumber: number): ShutdownUsage {
+function parseShutdownEvent(
+  event: Record<string, unknown>,
+  lineNumber: number
+): ShutdownUsage {
   const data = getRecord(event.data);
 
   const tokenDetails = parseTokenDetails(getRecord(data.tokenDetails));
@@ -76,7 +88,9 @@ function parseShutdownEvent(event: Record<string, unknown>, lineNumber: number):
   };
 }
 
-function parseModelMetrics(modelMetrics: Record<string, unknown>): ModelBreakdown[] {
+function parseModelMetrics(
+  modelMetrics: Record<string, unknown>
+): ModelBreakdown[] {
   const result: ModelBreakdown[] = [];
 
   for (const [modelName, rawMetric] of Object.entries(modelMetrics)) {
@@ -115,7 +129,9 @@ function parseTokenDetails(raw: Record<string, unknown>): TokenDetails {
   };
 }
 
-function parseTokenDetailsFromUsage(usage: Record<string, unknown>): TokenDetails {
+function parseTokenDetailsFromUsage(
+  usage: Record<string, unknown>
+): TokenDetails {
   const cacheRead = getNumber(usage.cacheReadTokens);
   const cacheWrite = getNumber(usage.cacheWriteTokens);
   const totalInput = getNumber(usage.inputTokens);
@@ -147,7 +163,10 @@ function groupModels(models: ModelBreakdown[]): ModelBreakdown[] {
     const existing = map.get(model.model);
 
     if (!existing) {
-      map.set(model.model, { ...model, tokenDetails: { ...model.tokenDetails } });
+      map.set(model.model, {
+        ...model,
+        tokenDetails: { ...model.tokenDetails },
+      });
       continue;
     }
 
@@ -155,7 +174,10 @@ function groupModels(models: ModelBreakdown[]): ModelBreakdown[] {
     existing.nanoAiu += model.nanoAiu;
     existing.credits += model.credits;
     existing.reasoningTokens += model.reasoningTokens;
-    existing.tokenDetails = sumTokenDetails([existing.tokenDetails, model.tokenDetails]);
+    existing.tokenDetails = sumTokenDetails([
+      existing.tokenDetails,
+      model.tokenDetails,
+    ]);
   }
 
   return [...map.values()].sort((a, b) => b.nanoAiu - a.nanoAiu);
@@ -179,7 +201,9 @@ function getRecord(value: unknown): Record<string, unknown> {
 }
 
 function getString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : undefined;
 }
 
 function getNumber(value: unknown): number {

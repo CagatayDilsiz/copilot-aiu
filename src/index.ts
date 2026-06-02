@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import os from "node:os";
 import { Command } from "commander";
 import { discoverSessions, findSessionByIdOrName } from "./discovery.js";

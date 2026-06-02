@@ -1,18 +1,35 @@
 {
   "name": "copilot-aiu",
   "version": "0.0.9",
-  "description": "",
-  "main": "index.js",
+  "description": "Analyze local GitHub Copilot CLI session usage, AI credits, token details, and mixed-model breakdowns.",
   "type": "module",
+  "bin": {
+    "copilot-aiu": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "watch": "tsx watch src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "github-copilot",
+    "copilot-cli",
+    "ai-credits",
+    "cli",
+    "usage"
+  ],
+  "author": "Çağatay Dilsiz",
+  "license": "MIT",
   "dependencies": {
     "commander": "^15.0.0",
     "yaml": "^2.9.0"

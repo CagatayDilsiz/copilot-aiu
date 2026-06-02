@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+
 import os from "node:os";
 import { Command } from "commander";
 import { discoverSessions, findSessionByIdOrName } from "./discovery.js";
@@ -10,8 +11,10 @@ const program = new Command();
 
 program
   .name("copilot-aiu")
-  .description("Analyze local GitHub Copilot CLI session-state data.")
-  .version("0.1.0");
+  .description(
+    "Analyze local GitHub Copilot CLI session usage, AI credits, token details, and mixed-model breakdowns."
+  )
+  .version("0.0.9");
 
 program
   .command("list", { isDefault: true })
@@ -357,7 +360,7 @@ function printSessionUsage(usage: SessionUsage): void {
     console.log();
   }
 
-  console.log("Shutdown runs:");
+  console.log("Session run details:");
 
   const runRows = usage.shutdowns.map((shutdown) => ({
     Line: String(shutdown.lineNumber),
@@ -375,7 +378,7 @@ function printSessionUsage(usage: SessionUsage): void {
 
   if (usage.shutdowns.some((shutdown) => shutdown.nanoAiu === 0)) {
     console.log(
-      "Note: shutdown events with 0 nanoAIU are shown as non-billable/no-op runs and are not included in totals."
+      "Note: runs with 0 nanoAIU are shown for history, but excluded from credit totals."
     );
     console.log();
   }

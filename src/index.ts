@@ -214,11 +214,17 @@ function maxWidthForColumn(header: string): number {
       return 8;
     case "Req":
       return 8;
-    case "Input":
-    case "Cache":
-    case "Write":
+    case "Fresh Input":
+      return 14;
+    case "Cached Input":
+      return 14;
+    case "Cache Write":
+      return 14;
     case "Output":
-    case "Reason":
+      return 12;
+    case "Reasoning":
+      return 12;
+    case "Input":
       return 12;
     case "Line":
       return 6;
@@ -302,31 +308,33 @@ function visibleLength(value: string): number {
 }
 
 function printSessionUsage(usage: SessionUsage): void {
-  console.log("Usage");
-  console.log("-----");
+  console.log("Session usage");
+  console.log("-------------");
 
   if (usage.shutdowns.length === 0) {
-    console.log("No session.shutdown events found.");
+    console.log("No session run records found.");
     console.log();
     return;
   }
 
-  console.log(`Shutdown events:  ${usage.shutdowns.length}`);
-  console.log(`Billable runs:    ${usage.billableShutdowns.length}`);
-  console.log(`AI Credits:       ${formatCredits(usage.totalCredits)}`);
-  console.log(`Estimated USD:    ${formatUsd(usage.totalCredits * 0.01)}`);
-  console.log(`API Duration:     ${formatDuration(usage.totalDurationMs)}`);
+  console.log(`Session runs:    ${usage.shutdowns.length}`);
+  console.log(`Billable runs:   ${usage.billableShutdowns.length}`);
+  console.log(`AI Credits:      ${formatCredits(usage.totalCredits)}`);
+  console.log(`Estimated USD:   ${formatUsd(usage.totalCredits * 0.01)}`);
+  console.log(`API Duration:    ${formatDuration(usage.totalDurationMs)}`);
   console.log();
 
-  console.log("Aggregate tokens:");
-  console.log(`  Input:       ${formatNumber(usage.tokenDetails.input)}`);
-  console.log(`  Cache read:  ${formatNumber(usage.tokenDetails.cacheRead)}`);
-  console.log(`  Cache write: ${formatNumber(usage.tokenDetails.cacheWrite)}`);
-  console.log(`  Output:      ${formatNumber(usage.tokenDetails.output)}`);
+  console.log("Total token usage:");
+  console.log(`  Fresh input:   ${formatNumber(usage.tokenDetails.input)}`);
+  console.log(`  Cached input:  ${formatNumber(usage.tokenDetails.cacheRead)}`);
+  console.log(
+    `  Cache write:   ${formatNumber(usage.tokenDetails.cacheWrite)}`
+  );
+  console.log(`  Output:        ${formatNumber(usage.tokenDetails.output)}`);
   console.log();
 
   if (usage.models.length > 0) {
-    console.log("Model breakdown:");
+    console.log("Model usage breakdown:");
 
     const rows = usage.models.map((model) => {
       const share =
@@ -337,11 +345,11 @@ function printSessionUsage(usage: SessionUsage): void {
         Credits: formatCredits(model.credits),
         Share: formatPercent(share),
         Req: formatNumber(model.requests),
-        Input: formatNumber(model.tokenDetails.input),
-        Cache: formatNumber(model.tokenDetails.cacheRead),
-        Write: formatNumber(model.tokenDetails.cacheWrite),
+        "Fresh Input": formatNumber(model.tokenDetails.input),
+        "Cached Input": formatNumber(model.tokenDetails.cacheRead),
+        "Cache Write": formatNumber(model.tokenDetails.cacheWrite),
         Output: formatNumber(model.tokenDetails.output),
-        Reason: formatNumber(model.reasoningTokens),
+        Reasoning: formatNumber(model.reasoningTokens),
       };
     });
 

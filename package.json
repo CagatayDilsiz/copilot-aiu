@@ -1,6 +1,6 @@
 {
   "name": "copilot-aiu",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Analyze local GitHub Copilot CLI session usage, AI credits, token details, and mixed-model breakdowns.",
   "type": "module",
   "bin": {
@@ -32,10 +32,14 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^15.0.0",
+    "ink": "^7.0.5",
+    "react": "^19.2.7",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }

@@ -49,6 +49,7 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
     setLoadingUsage(true);
     setUsage(null);
     setError(null);
+    setSelectedRunIndex(0); // Reset run index on session change
 
     parseSessionUsage(session.eventsJsonlPath)
       .then((data) => {
@@ -78,7 +79,10 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
         setSelectedIndex((prev) => (sessions.length > 0 ? Math.min(sessions.length - 1, prev + 1) : 0));
       }
       if (key.return) {
-        if (sessions.length > 0) setMode("session-detail");
+        // Block Enter if usage is not ready
+        if (sessions.length > 0 && usage && !loadingUsage && !error) {
+          setMode("session-detail");
+        }
       }
     } else if (mode === "session-detail") {
       if (key.upArrow) {
@@ -88,7 +92,9 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
         if (usage) setSelectedRunIndex((prev) => Math.min(usage.shutdowns.length - 1, prev + 1));
       }
       if (key.return) {
-        if (usage && usage.shutdowns[selectedRunIndex]) setMode("run-detail");
+        if (usage && usage.shutdowns.length > 0) {
+          setMode("run-detail");
+        }
       }
       if (key.escape) {
         setMode("dashboard");
@@ -103,7 +109,10 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
 
     if (input === "q") exit();
     if (input === "r") refreshSessions();
-    if (input === "c") setCurrentOnly((prev) => !prev);
+    if (input === "c") {
+      setCurrentOnly((prev) => !prev);
+      setSelectedIndex(0);
+    }
     if (input === "?") setMode("help");
   });
 
@@ -111,6 +120,7 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
 
   const renderDashboard = () => (
     <Box flexDirection="row" flexGrow={1}>
+      {/* Left List */}
       <Box flexDirection="column" width="30%" borderStyle="round" borderColor={theme.border} paddingX={1}>
         <Box borderStyle="single" borderColor={theme.border} borderBottom={true} borderTop={false} borderLeft={false} borderRight={false} marginBottom={1}>
           <Text bold color={theme.header}>Sessions ({sessions.length})</Text>
@@ -127,6 +137,7 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
         )}
       </Box>
 
+      {/* Right Summary */}
       <Box flexDirection="column" width="70%" borderStyle="round" borderColor={theme.border} paddingX={1}>
         {!selectedSession ? (
           <Box justifyContent="center" alignItems="center" flexGrow={1}>
@@ -137,7 +148,7 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
             <Text bold color={theme.secondary}>Summary: {selectedSession.displayName}</Text>
             <Box marginY={1} flexDirection="column">
               {loadingUsage ? (
-                <Text color={theme.dim}>Loading...</Text>
+                <Text color={theme.dim}>Loading usage data...</Text>
               ) : error ? (
                 <Text color={theme.error}>Error: {error}</Text>
               ) : usage ? (
@@ -169,7 +180,7 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
                   )}
 
                   <Box flexDirection="column" marginTop={1}>
-                    <Text bold color={theme.primary}>Recent 5 Runs</Text>
+                    <Text bold color={theme.primary}>Recent Runs</Text>
                     {usage.shutdowns.slice(0, 5).map((s, i) => (
                       <Text key={i} wrap="truncate-end">
                         [{s.lineNumber}] {s.timestamp?.slice(11, 19)} - {s.currentModel} ({s.credits.toFixed(3)} cr)
@@ -180,7 +191,9 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
                     <Text color={theme.dim}>Press Enter for full details</Text>
                   </Box>
                 </>
-              ) : null}
+              ) : (
+                <Text color={theme.dim}>Usage data not available.</Text>
+              )}
             </Box>
           </Box>
         )}
@@ -191,44 +204,80 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
   const renderSessionDetail = () => {
     if (!selectedSession || !usage) return null;
     const w = selectedSession.workspace;
+
+    // Run list paging
+    const windowSize = 8;
+    const start = Math.max(0, Math.min(selectedRunIndex - Math.floor(windowSize / 2), usage.shutdowns.length - windowSize));
+    const visibleRuns = usage.shutdowns.slice(start, start + windowSize);
+
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={2} flexGrow={1}>
         <Text bold color={theme.secondary} underline>Session Details: {selectedSession.displayName}</Text>
+
         <Box flexDirection="row" marginTop={1}>
           <Box flexDirection="column" width="50%">
             <Text bold color={theme.primary}>Metadata</Text>
-            <Text>Session ID: {selectedSession.displayId}</Text>
-            <Text>Repository: {w.repository ?? "-"}</Text>
-            <Text>Branch:     {w.branch ?? "-"}</Text>
-            <Text>Host Type:  {w.host_type ?? "-"}</Text>
-            <Text>Client:     {w.client_name ?? "-"}</Text>
-            <Text>Created:    {w.created_at?.slice(0,16).replace('T', ' ')}</Text>
-            <Text>Updated:    {w.updated_at?.slice(0,16).replace('T', ' ')}</Text>
+            <Text>ID:      {selectedSession.displayId}</Text>
+            <Text>Repo:    {w.repository ?? "-"}</Text>
+            <Text>Branch:  {w.branch ?? "-"}</Text>
+            <Text>Host:    {w.host_type ?? "-"}</Text>
+            <Text>Client:  {w.client_name ?? "-"}</Text>
+            <Text>Named:   {w.user_named ? "true" : "false"}</Text>
+            <Text>Created: {w.created_at?.slice(0,10) ?? "-"}</Text>
+            <Text>Updated: {w.updated_at?.slice(0,10) ?? "-"}</Text>
+            <Text>Folder:  {w.cwd ?? "-"}</Text>
+            <Text>GitRoot: {w.git_root ?? "-"}</Text>
           </Box>
           <Box flexDirection="column" width="50%">
             <Text bold color={theme.primary}>Aggregated Usage</Text>
-            <Text>AI Credits:    {usage.totalCredits.toFixed(6)}</Text>
-            <Text>Billable Runs: {usage.billableShutdowns.length}</Text>
-            <Text>API Duration:  {(usage.totalDurationMs / 1000).toFixed(1)}s</Text>
-            <Text>Reasoning Tok: {usage.models.reduce((acc, m) => acc + m.reasoningTokens, 0)}</Text>
-            <Text>Files Mod:    {usage.shutdowns.reduce((acc, s) => acc + s.filesModified.length, 0)}</Text>
-            <Text>Changes:      +{usage.shutdowns.reduce((acc, s) => acc + s.linesAdded, 0)} / -{usage.shutdowns.reduce((acc, s) => acc + s.linesRemoved, 0)}</Text>
+            <Text>Credits:    {usage.totalCredits.toFixed(6)}</Text>
+            <Text>Est. USD:   ${(usage.totalCredits * 0.01).toFixed(4)}</Text>
+            <Text>Total Runs: {usage.shutdowns.length}</Text>
+            <Text>Billable:   {usage.billableShutdowns.length}</Text>
+            <Text>Duration:   {(usage.totalDurationMs / 1000).toFixed(1)}s</Text>
+            <Text>Input Tok:  {usage.tokenDetails.input}</Text>
+            <Text>Cached Tok: {usage.tokenDetails.cacheRead}</Text>
+            <Text>Write Tok:  {usage.tokenDetails.cacheWrite}</Text>
+            <Text>Output Tok: {usage.tokenDetails.output}</Text>
+            <Text>Reason Tok: {usage.models.reduce((acc, m) => acc + m.reasoningTokens, 0)}</Text>
           </Box>
         </Box>
 
-        <Box flexDirection="column" marginTop={1} flexGrow={1}>
-          <Text bold color={theme.primary}>All Runs (Select and Enter for details)</Text>
+        {/* Model Breakdown */}
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color={theme.primary}>Model Breakdown</Text>
           <Box flexDirection="column" borderStyle="single" borderColor={theme.dim} paddingX={1}>
-            {usage.shutdowns.map((s, i) => (
-              <Text key={i} {...(i === selectedRunIndex ? { color: theme.highlight as any } : {})}>
-                {i === selectedRunIndex ? "> " : "  "}
-                [{s.lineNumber}] {s.timestamp?.slice(11, 19)} | {s.currentModel?.padEnd(20)} | {s.credits.toFixed(3)} cr
-              </Text>
-            ))}
+            {usage.models.map((m, i) => {
+               const share = usage.totalCredits > 0 ? (m.credits / usage.totalCredits) * 100 : 0;
+               return (
+                 <Text key={i} wrap="truncate-end">
+                   {m.model.padEnd(20)} | {m.credits.toFixed(4)} cr ({share.toFixed(1)}%) | {m.requests} reqs | In: {m.tokenDetails.input} (C:{m.tokenDetails.cacheRead}, W:{m.tokenDetails.cacheWrite}) | Out: {m.tokenDetails.output} (R:{m.reasoningTokens})
+                 </Text>
+               );
+            })}
           </Box>
         </Box>
+
+        {/* Runs List with Paging */}
+        <Box flexDirection="column" marginTop={1} flexGrow={1}>
+          <Text bold color={theme.primary}>All Runs ({usage.shutdowns.length})</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={theme.dim} paddingX={1}>
+            {start > 0 && <Text color={theme.dim}>  ... (scroll up)</Text>}
+            {visibleRuns.map((s, i) => {
+              const realIndex = start + i;
+              return (
+                <Text key={realIndex} {...(realIndex === selectedRunIndex ? { color: theme.highlight as any, bold: true } : {})}>
+                  {realIndex === selectedRunIndex ? "> " : "  "}
+                  [{s.lineNumber.toString().padStart(3)}] {s.timestamp?.slice(11, 19)} | {s.currentModel?.padEnd(20)} | {s.credits.toFixed(3)} cr | {s.durationMs}ms
+                </Text>
+              );
+            })}
+            {start + windowSize < usage.shutdowns.length && <Text color={theme.dim}>  ... (scroll down)</Text>}
+          </Box>
+        </Box>
+
         <Box marginTop={1}>
-          <Text color={theme.dim}>Esc back to Dashboard | Enter for Run Detail</Text>
+          <Text color={theme.dim}>Esc back | Enter for Run Detail</Text>
         </Box>
       </Box>
     );
@@ -240,23 +289,36 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={2} flexGrow={1}>
         <Text bold color={theme.secondary} underline>Run Detail: Line {run.lineNumber}</Text>
-        <Box flexDirection="column" marginTop={1}>
-          <Text><Text bold color={theme.primary}>Timestamp:</Text> {run.timestamp}</Text>
-          <Text><Text bold color={theme.primary}>Model:</Text>     {run.currentModel}</Text>
-          <Text><Text bold color={theme.primary}>Credits:</Text>   {run.credits.toFixed(6)}</Text>
-          <Text><Text bold color={theme.primary}>Duration:</Text>  {run.durationMs}ms</Text>
+        <Box flexDirection="row" marginTop={1}>
+          <Box flexDirection="column" width="50%">
+            <Text bold color={theme.primary}>Metadata</Text>
+            <Text>Time:     {run.timestamp}</Text>
+            <Text>Model:    {run.currentModel}</Text>
+            <Text>Credits:  {run.credits.toFixed(6)}</Text>
+            <Text>Duration: {run.durationMs}ms</Text>
+          </Box>
+          <Box flexDirection="column" width="50%">
+            <Text bold color={theme.primary}>Tokens</Text>
+            <Text>Input:    {run.tokenDetails.input}</Text>
+            <Text>Cached:   {run.tokenDetails.cacheRead}</Text>
+            <Text>Write:    {run.tokenDetails.cacheWrite}</Text>
+            <Text>Output:   {run.tokenDetails.output}</Text>
+          </Box>
         </Box>
-        <Box flexDirection="column" marginTop={1}>
-          <Text bold color={theme.primary}>Tokens</Text>
-          <Text>Input: {run.tokenDetails.input} | Cached: {run.tokenDetails.cacheRead} | Cache Write: {run.tokenDetails.cacheWrite} | Output: {run.tokenDetails.output}</Text>
-        </Box>
+
         <Box flexDirection="column" marginTop={1}>
           <Text bold color={theme.primary}>Changes</Text>
-          <Text>Lines Added: {run.linesAdded} | Lines Removed: {run.linesRemoved}</Text>
-          <Text>Files Modified ({run.filesModified.length}):</Text>
-          {run.filesModified.map((f, i) => (
-            <Text key={i} color={theme.dim}>  - {f}</Text>
-          ))}
+          <Text>Files Modified: {run.filesModified.length}</Text>
+          <Text>Lines Added:    {run.linesAdded}</Text>
+          <Text>Lines Removed:  {run.linesRemoved}</Text>
+          {run.filesModified.length > 0 && (
+             <Box flexDirection="column" borderStyle="single" borderColor={theme.dim} paddingX={1} marginTop={1}>
+               {run.filesModified.slice(0, 10).map((f, i) => (
+                 <Text key={i} color={theme.dim}>  - {f}</Text>
+               ))}
+               {run.filesModified.length > 10 && <Text color={theme.dim}>  ... and {run.filesModified.length - 10} more</Text>}
+             </Box>
+          )}
         </Box>
         <Box marginTop={1}>
           <Text color={theme.dim}>Esc back to Session Details</Text>

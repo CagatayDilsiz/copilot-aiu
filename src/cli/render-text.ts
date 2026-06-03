@@ -273,7 +273,7 @@ function trimToWidth(value: string, width: number): string {
     return value.slice(0, width);
   }
 
-  return value.slice(0, width - 1) + "…";
+  return value.slice(0, width - 1) + "...";
 }
 
 function visibleLength(value: string): number {

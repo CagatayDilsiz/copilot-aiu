@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { discoverSessions, findSessionByIdOrName } from "./discovery.js";
 import { parseSessionUsage } from "./usage.js";
 import {
@@ -25,7 +25,7 @@ program
   .command("list")
   .description("List Copilot CLI sessions.")
   .option("-c, --current", "Only list sessions related to current directory.")
-  .option("-f, --format <format>", "Output format: text, json", "text")
+  .addOption(new Option("-f, --format <format>", "Output format").choices(["text", "json"]).default("text"))
   .action((options) => {
     const { current, format } = normalizeGlobalOptions(options);
     const sessions = discoverSessions({ currentOnly: current });
@@ -48,7 +48,7 @@ program
   .description("Show session details by id or name.")
   .argument("<idOrName>", "Session id, id prefix, or session name.")
   .option("-c, --current", "Search only sessions related to current directory.")
-  .option("-f, --format <format>", "Output format: text, json", "text")
+  .addOption(new Option("-f, --format <format>", "Output format").choices(["text", "json"]).default("text"))
   .action(async (idOrName, options) => {
     const { current, format } = normalizeGlobalOptions(options);
     const sessions = discoverSessions({ currentOnly: current });
@@ -86,7 +86,7 @@ program
   .command("last")
   .description("Show latest Copilot CLI session details.")
   .option("-c, --current", "Use latest session related to current directory.")
-  .option("-f, --format <format>", "Output format: text, json", "text")
+  .addOption(new Option("-f, --format <format>", "Output format").choices(["text", "json"]).default("text"))
   .action(async (options) => {
     const { current, format } = normalizeGlobalOptions(options);
     const sessions = discoverSessions({ currentOnly: current });

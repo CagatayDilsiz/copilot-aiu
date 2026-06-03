@@ -86,10 +86,14 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
       }
     } else if (mode === "session-detail") {
       if (key.upArrow) {
-        setSelectedRunIndex((prev) => Math.max(0, prev - 1));
+        if (usage && usage.shutdowns.length > 0) {
+          setSelectedRunIndex((prev) => Math.max(0, prev - 1));
+        }
       }
       if (key.downArrow) {
-        if (usage) setSelectedRunIndex((prev) => Math.min(usage.shutdowns.length - 1, prev + 1));
+        if (usage && usage.shutdowns.length > 0) {
+          setSelectedRunIndex((prev) => Math.min(usage.shutdowns.length - 1, prev + 1));
+        }
       }
       if (key.return) {
         if (usage && usage.shutdowns.length > 0) {
@@ -258,21 +262,26 @@ const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
           </Box>
         </Box>
 
-        {/* Runs List with Paging */}
         <Box flexDirection="column" marginTop={1} flexGrow={1}>
           <Text bold color={theme.primary}>All Runs ({usage.shutdowns.length})</Text>
           <Box flexDirection="column" borderStyle="single" borderColor={theme.dim} paddingX={1}>
-            {start > 0 && <Text color={theme.dim}>  ... (scroll up)</Text>}
-            {visibleRuns.map((s, i) => {
-              const realIndex = start + i;
-              return (
-                <Text key={realIndex} {...(realIndex === selectedRunIndex ? { color: theme.highlight as any, bold: true } : {})}>
-                  {realIndex === selectedRunIndex ? "> " : "  "}
-                  [{s.lineNumber.toString().padStart(3)}] {s.timestamp?.slice(11, 19)} | {s.currentModel?.padEnd(20)} | {s.credits.toFixed(3)} cr | {s.durationMs}ms
-                </Text>
-              );
-            })}
-            {start + windowSize < usage.shutdowns.length && <Text color={theme.dim}>  ... (scroll down)</Text>}
+            {usage.shutdowns.length === 0 ? (
+              <Text italic color={theme.dim}>No runs available.</Text>
+            ) : (
+              <>
+                {start > 0 && <Text color={theme.dim}>  ... (scroll up)</Text>}
+                {visibleRuns.map((s, i) => {
+                  const realIndex = start + i;
+                  return (
+                    <Text key={realIndex} {...(realIndex === selectedRunIndex ? { color: theme.highlight as any, bold: true } : {})}>
+                      {realIndex === selectedRunIndex ? "> " : "  "}
+                      [{s.lineNumber.toString().padStart(3)}] {s.timestamp?.slice(11, 19)} | {s.currentModel?.padEnd(20)} | {s.credits.toFixed(3)} cr | {s.durationMs}ms
+                    </Text>
+                  );
+                })}
+                {start + windowSize < usage.shutdowns.length && <Text color={theme.dim}>  ... (scroll down)</Text>}
+              </>
+            )}
           </Box>
         </Box>
 

@@ -1,19 +1,26 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { render, Box, Text, useInput } from "ink";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { render, Box, Text, useInput, useApp } from "ink";
 import { discoverSessions } from "../discovery.js";
 import { parseSessionUsage } from "../usage.js";
-import type { SessionInfo, SessionUsage } from "../types.js";
+import type { SessionInfo, SessionUsage, ShutdownUsage } from "../types.js";
+import { theme } from "./theme.js";
+
+type ScreenMode = "dashboard" | "session-detail" | "run-detail" | "help";
 
 type TuiProps = {
-  currentOnly: boolean;
+  initialCurrentOnly: boolean;
 };
 
-const TuiApp: React.FC<TuiProps> = ({ currentOnly }) => {
+const TuiApp: React.FC<TuiProps> = ({ initialCurrentOnly }) => {
+  const { exit } = useApp();
+  const [currentOnly, setCurrentOnly] = useState(initialCurrentOnly);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [usage, setUsage] = useState<SessionUsage | null>(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<ScreenMode>("dashboard");
+  const [selectedRunIndex, setSelectedRunIndex] = useState(0);
 
   const refreshSessions = useCallback(() => {
     const found = discoverSessions({ currentOnly });
@@ -21,13 +28,13 @@ const TuiApp: React.FC<TuiProps> = ({ currentOnly }) => {
     if (found.length === 0) {
       setSelectedIndex(0);
     } else if (selectedIndex >= found.length) {
-      setSelectedIndex(found.length - 1);
+      setSelectedIndex(Math.max(0, found.length - 1));
     }
   }, [currentOnly, selectedIndex]);
 
   useEffect(() => {
     refreshSessions();
-  }, [refreshSessions]);
+  }, [currentOnly]);
 
   useEffect(() => {
     if (sessions.length === 0) {
@@ -40,7 +47,7 @@ const TuiApp: React.FC<TuiProps> = ({ currentOnly }) => {
 
     let isMounted = true;
     setLoadingUsage(true);
-    setUsage(null); // Reset usage on selection change
+    setUsage(null);
     setError(null);
 
     parseSessionUsage(session.eventsJsonlPath)
@@ -63,124 +70,234 @@ const TuiApp: React.FC<TuiProps> = ({ currentOnly }) => {
   }, [sessions, selectedIndex]);
 
   useInput((input, key) => {
-    if (key.upArrow) {
-      setSelectedIndex((prev) => Math.max(0, prev - 1));
+    if (mode === "dashboard") {
+      if (key.upArrow) {
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
+      }
+      if (key.downArrow) {
+        setSelectedIndex((prev) => (sessions.length > 0 ? Math.min(sessions.length - 1, prev + 1) : 0));
+      }
+      if (key.return) {
+        if (sessions.length > 0) setMode("session-detail");
+      }
+    } else if (mode === "session-detail") {
+      if (key.upArrow) {
+        setSelectedRunIndex((prev) => Math.max(0, prev - 1));
+      }
+      if (key.downArrow) {
+        if (usage) setSelectedRunIndex((prev) => Math.min(usage.shutdowns.length - 1, prev + 1));
+      }
+      if (key.return) {
+        if (usage && usage.shutdowns[selectedRunIndex]) setMode("run-detail");
+      }
+      if (key.escape) {
+        setMode("dashboard");
+      }
+    } else if (mode === "run-detail") {
+      if (key.escape) {
+        setMode("session-detail");
+      }
+    } else if (mode === "help") {
+      if (key.escape || input === "?") setMode("dashboard");
     }
-    if (key.downArrow) {
-      setSelectedIndex((prev) => (sessions.length > 0 ? Math.min(sessions.length - 1, prev + 1) : 0));
-    }
-    if (input === "r") {
-      refreshSessions();
-    }
-    if (input === "q") {
-      process.exit(0);
-    }
+
+    if (input === "q") exit();
+    if (input === "r") refreshSessions();
+    if (input === "c") setCurrentOnly((prev) => !prev);
+    if (input === "?") setMode("help");
   });
 
   const selectedSession = sessions.length > 0 ? sessions[selectedIndex] : null;
 
-  return (
-    <Box flexDirection="column" padding={1}>
-      <Box marginBottom={1}>
-        <Text bold color="cyan">
-          Copilot AIU - Local Usage Analyzer
-        </Text>
+  const renderDashboard = () => (
+    <Box flexDirection="row" flexGrow={1}>
+      <Box flexDirection="column" width="30%" borderStyle="round" borderColor={theme.border} paddingX={1}>
+        <Box borderStyle="single" borderColor={theme.border} borderBottom={true} borderTop={false} borderLeft={false} borderRight={false} marginBottom={1}>
+          <Text bold color={theme.header}>Sessions ({sessions.length})</Text>
+        </Box>
+        {sessions.length === 0 ? (
+          <Text italic color={theme.dim}>No sessions</Text>
+        ) : (
+          sessions.map((s, i) => (
+            <Text key={s.displayId} wrap="truncate-end" {...(i === selectedIndex ? { color: theme.highlight as any, bold: true } : {})}>
+              {i === selectedIndex ? "> " : "  "}
+              {s.displayName}
+            </Text>
+          ))
+        )}
       </Box>
-      <Box flexDirection="row" flexGrow={1} minHeight={15}>
-        {/* Session List */}
-        <Box
-          flexDirection="column"
-          width="30%"
-          borderStyle="round"
-          borderColor="gray"
-          paddingX={1}
-        >
-          <Box borderStyle="single" borderColor="gray" borderBottom={true} borderTop={false} borderLeft={false} borderRight={false} marginBottom={1}>
-            <Text bold>Sessions ({sessions.length})</Text>
+
+      <Box flexDirection="column" width="70%" borderStyle="round" borderColor={theme.border} paddingX={1}>
+        {!selectedSession ? (
+          <Box justifyContent="center" alignItems="center" flexGrow={1}>
+            <Text italic color={theme.dim}>No session selected.</Text>
           </Box>
-          {sessions.length === 0 ? (
-            <Text dimColor italic>No sessions</Text>
-          ) : (
-            sessions.map((s, i) => (
-              <Text key={s.displayId} wrap="truncate-end" {...(i === selectedIndex ? { color: "blue", bold: true } : {})}>
-                {i === selectedIndex ? "> " : "  "}
-                {s.displayName}
-              </Text>
-            ))
-          )}
-        </Box>
-        {/* Details Area */}
-        <Box
-          flexDirection="column"
-          width="70%"
-          borderStyle="round"
-          borderColor="blue"
-          paddingX={1}
-        >
-          {!selectedSession ? (
-            <Box justifyContent="center" alignItems="center" flexGrow={1}>
-              <Text italic dimColor>No session selected.</Text>
-            </Box>
-          ) : (
-            <>
-              <Text bold color="yellow">
-                Session: {selectedSession.displayName}
-              </Text>
-              <Text dimColor>ID: {selectedSession.displayId}</Text>
-              <Text dimColor>Folder: {selectedSession.relatedFolder}</Text>
-              <Box marginY={1} flexDirection="column" flexGrow={1}>
-                {loadingUsage ? (
-                  <Text color="gray">Loading usage data...</Text>
-                ) : error ? (
-                  <Text color="red">Error: {error}</Text>
-                ) : usage ? (
-                  <>
-                    <Box flexDirection="row" justifyContent="space-between">
-                      <Box flexDirection="column">
-                        <Text bold underline>Summary</Text>
-                        <Text>Credits: {usage.totalCredits.toFixed(4)}</Text>
-                        <Text>Est. USD: ${(usage.totalCredits * 0.01).toFixed(4)}</Text>
-                        <Text>Runs: {usage.shutdowns.length}</Text>
-                      </Box>
-                      <Box flexDirection="column">
-                        <Text bold underline>Tokens</Text>
-                        <Text>Input: {usage.tokenDetails.input}</Text>
-                        <Text>Cached: {usage.tokenDetails.cacheRead}</Text>
-                        <Text>Output: {usage.tokenDetails.output}</Text>
-                      </Box>
+        ) : (
+          <Box flexDirection="column">
+            <Text bold color={theme.secondary}>Summary: {selectedSession.displayName}</Text>
+            <Box marginY={1} flexDirection="column">
+              {loadingUsage ? (
+                <Text color={theme.dim}>Loading...</Text>
+              ) : error ? (
+                <Text color={theme.error}>Error: {error}</Text>
+              ) : usage ? (
+                <>
+                  <Box flexDirection="row" justifyContent="space-between">
+                    <Box flexDirection="column">
+                      <Text bold color={theme.primary}>Usage Stats</Text>
+                      <Text>Credits: {usage.totalCredits.toFixed(4)}</Text>
+                      <Text>Est. USD: ${(usage.totalCredits * 0.01).toFixed(4)}</Text>
+                      <Text>Total Runs: {usage.shutdowns.length}</Text>
+                      <Text>Billable: {usage.billableShutdowns.length}</Text>
                     </Box>
-                    {usage.models.length > 0 && (
-                      <Box flexDirection="column" marginTop={1}>
-                        <Text bold underline>Models</Text>
-                        {usage.models.map((m) => (
-                          <Text key={m.model}>
-                            - {m.model}: {m.credits.toFixed(3)} credits ({m.requests} reqs)
-                          </Text>
-                        ))}
-                      </Box>
-                    )}
+                    <Box flexDirection="column">
+                      <Text bold color={theme.primary}>Tokens</Text>
+                      <Text>Input: {usage.tokenDetails.input}</Text>
+                      <Text>Cached: {usage.tokenDetails.cacheRead}</Text>
+                      <Text>Cache Write: {usage.tokenDetails.cacheWrite}</Text>
+                      <Text>Output: {usage.tokenDetails.output}</Text>
+                    </Box>
+                  </Box>
+
+                  {usage.models.length > 0 && (
                     <Box flexDirection="column" marginTop={1}>
-                      <Text bold underline>Recent Runs</Text>
-                      {usage.shutdowns.slice(0, 5).map((s, i) => (
-                        <Text key={i} wrap="truncate-end">
-                          [{s.lineNumber}] {s.timestamp?.slice(11, 19)} - {s.currentModel} - {s.credits.toFixed(3)} cr
-                        </Text>
+                      <Text bold color={theme.primary}>Top Models</Text>
+                      {usage.models.slice(0, 3).map(m => (
+                        <Text key={m.model}>- {m.model} ({m.requests} reqs)</Text>
                       ))}
-                      {usage.shutdowns.length > 5 && <Text dimColor>... and {usage.shutdowns.length - 5} more</Text>}
                     </Box>
-                  </>
-                ) : (
-                  <Text dimColor>No usage data available.</Text>
-                )}
-              </Box>
-            </>
-          )}
+                  )}
+
+                  <Box flexDirection="column" marginTop={1}>
+                    <Text bold color={theme.primary}>Recent 5 Runs</Text>
+                    {usage.shutdowns.slice(0, 5).map((s, i) => (
+                      <Text key={i} wrap="truncate-end">
+                        [{s.lineNumber}] {s.timestamp?.slice(11, 19)} - {s.currentModel} ({s.credits.toFixed(3)} cr)
+                      </Text>
+                    ))}
+                  </Box>
+                  <Box marginTop={1}>
+                    <Text color={theme.dim}>Press Enter for full details</Text>
+                  </Box>
+                </>
+              ) : null}
+            </Box>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+
+  const renderSessionDetail = () => {
+    if (!selectedSession || !usage) return null;
+    const w = selectedSession.workspace;
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={2} flexGrow={1}>
+        <Text bold color={theme.secondary} underline>Session Details: {selectedSession.displayName}</Text>
+        <Box flexDirection="row" marginTop={1}>
+          <Box flexDirection="column" width="50%">
+            <Text bold color={theme.primary}>Metadata</Text>
+            <Text>Session ID: {selectedSession.displayId}</Text>
+            <Text>Repository: {w.repository ?? "-"}</Text>
+            <Text>Branch:     {w.branch ?? "-"}</Text>
+            <Text>Host Type:  {w.host_type ?? "-"}</Text>
+            <Text>Client:     {w.client_name ?? "-"}</Text>
+            <Text>Created:    {w.created_at?.slice(0,16).replace('T', ' ')}</Text>
+            <Text>Updated:    {w.updated_at?.slice(0,16).replace('T', ' ')}</Text>
+          </Box>
+          <Box flexDirection="column" width="50%">
+            <Text bold color={theme.primary}>Aggregated Usage</Text>
+            <Text>AI Credits:    {usage.totalCredits.toFixed(6)}</Text>
+            <Text>Billable Runs: {usage.billableShutdowns.length}</Text>
+            <Text>API Duration:  {(usage.totalDurationMs / 1000).toFixed(1)}s</Text>
+            <Text>Reasoning Tok: {usage.models.reduce((acc, m) => acc + m.reasoningTokens, 0)}</Text>
+            <Text>Files Mod:    {usage.shutdowns.reduce((acc, s) => acc + s.filesModified.length, 0)}</Text>
+            <Text>Changes:      +{usage.shutdowns.reduce((acc, s) => acc + s.linesAdded, 0)} / -{usage.shutdowns.reduce((acc, s) => acc + s.linesRemoved, 0)}</Text>
+          </Box>
+        </Box>
+
+        <Box flexDirection="column" marginTop={1} flexGrow={1}>
+          <Text bold color={theme.primary}>All Runs (Select and Enter for details)</Text>
+          <Box flexDirection="column" borderStyle="single" borderColor={theme.dim} paddingX={1}>
+            {usage.shutdowns.map((s, i) => (
+              <Text key={i} {...(i === selectedRunIndex ? { color: theme.highlight as any } : {})}>
+                {i === selectedRunIndex ? "> " : "  "}
+                [{s.lineNumber}] {s.timestamp?.slice(11, 19)} | {s.currentModel?.padEnd(20)} | {s.credits.toFixed(3)} cr
+              </Text>
+            ))}
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text color={theme.dim}>Esc back to Dashboard | Enter for Run Detail</Text>
         </Box>
       </Box>
-      {/* Help Footer */}
-      <Box marginTop={1} paddingX={1} borderStyle="single" borderColor="gray" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false}>
+    );
+  };
+
+  const renderRunDetail = () => {
+    const run = usage?.shutdowns[selectedRunIndex];
+    if (!run) return null;
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={2} flexGrow={1}>
+        <Text bold color={theme.secondary} underline>Run Detail: Line {run.lineNumber}</Text>
+        <Box flexDirection="column" marginTop={1}>
+          <Text><Text bold color={theme.primary}>Timestamp:</Text> {run.timestamp}</Text>
+          <Text><Text bold color={theme.primary}>Model:</Text>     {run.currentModel}</Text>
+          <Text><Text bold color={theme.primary}>Credits:</Text>   {run.credits.toFixed(6)}</Text>
+          <Text><Text bold color={theme.primary}>Duration:</Text>  {run.durationMs}ms</Text>
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color={theme.primary}>Tokens</Text>
+          <Text>Input: {run.tokenDetails.input} | Cached: {run.tokenDetails.cacheRead} | Cache Write: {run.tokenDetails.cacheWrite} | Output: {run.tokenDetails.output}</Text>
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color={theme.primary}>Changes</Text>
+          <Text>Lines Added: {run.linesAdded} | Lines Removed: {run.linesRemoved}</Text>
+          <Text>Files Modified ({run.filesModified.length}):</Text>
+          {run.filesModified.map((f, i) => (
+            <Text key={i} color={theme.dim}>  - {f}</Text>
+          ))}
+        </Box>
+        <Box marginTop={1}>
+          <Text color={theme.dim}>Esc back to Session Details</Text>
+        </Box>
+      </Box>
+    );
+  };
+
+  const renderHelp = () => (
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={2} flexGrow={1} justifyContent="center" alignItems="center">
+      <Text bold color={theme.header}>Keyboard Shortcuts</Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Text><Text bold color={theme.highlight}>↑/↓</Text>       Navigate List</Text>
+        <Text><Text bold color={theme.highlight}>Enter</Text>     Open Detail / Select</Text>
+        <Text><Text bold color={theme.highlight}>Esc</Text>       Back / Exit Screen</Text>
+        <Text><Text bold color={theme.highlight}>r</Text>         Refresh Sessions</Text>
+        <Text><Text bold color={theme.highlight}>c</Text>         Toggle Current Folder Only ({currentOnly ? "ON" : "OFF"})</Text>
+        <Text><Text bold color={theme.highlight}>q</Text>         Quit Application</Text>
+        <Text><Text bold color={theme.highlight}>?</Text>         Toggle Help Screen</Text>
+      </Box>
+      <Box marginTop={2}>
+        <Text color={theme.dim}>Press Esc or ? to close</Text>
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box flexDirection="column" padding={1} minHeight={20}>
+      <Box marginBottom={1} justifyContent="space-between">
+        <Text bold color={theme.header}>Copilot AIU - {currentOnly ? "Current Directory" : "All Sessions"}</Text>
+        <Text color={theme.dim}>{mode.toUpperCase()} MODE</Text>
+      </Box>
+
+      {mode === "dashboard" && renderDashboard()}
+      {mode === "session-detail" && renderSessionDetail()}
+      {mode === "run-detail" && renderRunDetail()}
+      {mode === "help" && renderHelp()}
+
+      <Box marginTop={1} paddingX={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false}>
         <Text dimColor>
-          <Text bold color="white">↑/↓</Text> Navigate  |  <Text bold color="white">r</Text> Refresh  |  <Text bold color="white">q</Text> Quit
+          <Text bold color={theme.text}>↑/↓</Text> Nav | <Text bold color={theme.text}>Enter</Text> Detail | <Text bold color={theme.text}>Esc</Text> Back | <Text bold color={theme.text}>c</Text> Current | <Text bold color={theme.text}>r</Text> Refresh | <Text bold color={theme.text}>?</Text> Help | <Text bold color={theme.text}>q</Text> Quit
         </Text>
       </Box>
     </Box>
@@ -188,5 +305,5 @@ const TuiApp: React.FC<TuiProps> = ({ currentOnly }) => {
 };
 
 export function runTui(options: { currentOnly: boolean }) {
-  render(<TuiApp currentOnly={options.currentOnly} />);
+  render(<TuiApp initialCurrentOnly={options.currentOnly} />);
 }

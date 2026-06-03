@@ -10,7 +10,7 @@ import {
   printJson,
 } from "./cli/render-text.js";
 import { runTui } from "./tui/index.js";
-import type { GlobalOptions } from "./options/index.js";
+import { normalizeGlobalOptions } from "./options/index.js";
 
 const program = new Command();
 
@@ -21,21 +21,14 @@ program
   )
   .version("0.0.10");
 
-function validateFormat(format: string | undefined): "text" | "json" {
-  if (format === "json") return "json";
-  return "text";
-}
-
 program
-  .command("list", { isDefault: true })
+  .command("list")
   .description("List Copilot CLI sessions.")
   .option("-c, --current", "Only list sessions related to current directory.")
   .option("-f, --format <format>", "Output format: text, json", "text")
-  .action((options: GlobalOptions) => {
-    const format = validateFormat(options.format);
-    const sessions = discoverSessions({
-      currentOnly: Boolean(options.current),
-    });
+  .action((options) => {
+    const { current, format } = normalizeGlobalOptions(options);
+    const sessions = discoverSessions({ currentOnly: current });
 
     if (format === "json") {
       printJson(sessions);
@@ -43,11 +36,7 @@ program
     }
 
     if (sessions.length === 0) {
-      console.log(
-        options.current
-          ? "No sessions found for current directory."
-          : "No sessions found."
-      );
+      console.log(current ? "No sessions found for current directory." : "No sessions found.");
       return;
     }
 
@@ -60,47 +49,30 @@ program
   .argument("<idOrName>", "Session id, id prefix, or session name.")
   .option("-c, --current", "Search only sessions related to current directory.")
   .option("-f, --format <format>", "Output format: text, json", "text")
-  .action(async (idOrName: string, options: GlobalOptions) => {
-    const format = validateFormat(options.format);
-    const sessions = discoverSessions({
-      currentOnly: Boolean(options.current),
-    });
+  .action(async (idOrName, options) => {
+    const { current, format } = normalizeGlobalOptions(options);
+    const sessions = discoverSessions({ currentOnly: current });
     const result = findSessionByIdOrName(idOrName, sessions);
 
     if (result.status === "not-found") {
-      if (format === "json") {
-        printJson({ error: "not-found", query: idOrName });
-      } else {
-        console.log(`No session found for: ${idOrName}`);
-      }
+      if (format === "json") printJson({ error: "not-found", query: idOrName });
+      else console.log(`No session found for: ${idOrName}`);
       return;
     }
 
     if (result.status === "ambiguous") {
-      if (format === "json") {
-        printJson({ error: "ambiguous", query: idOrName, matches: result.matches });
-      } else {
-        console.log(`Ambiguous session query: ${idOrName}`);
-        console.log("Use a longer id/name. Matching sessions:");
-        console.log();
+      if (format === "json") printJson({ error: "ambiguous", query: idOrName, matches: result.matches });
+      else {
+        console.log(`Ambiguous session query: ${idOrName}\nUse a longer id/name. Matching sessions:\n`);
         printSessionList(result.matches);
       }
       return;
     }
 
-    const [session] = result.matches;
-
-    if (!session) {
-      if (format === "json") {
-        printJson({ error: "not-found", query: idOrName });
-      } else {
-        console.log(`No session found for: ${idOrName}`);
-      }
-      return;
-    }
+    const session = result.matches[0];
+    if (!session) return;
 
     const usage = await parseSessionUsage(session.eventsJsonlPath);
-
     if (format === "json") {
       printJson({ session, usage });
       return;
@@ -115,42 +87,20 @@ program
   .description("Show latest Copilot CLI session details.")
   .option("-c, --current", "Use latest session related to current directory.")
   .option("-f, --format <format>", "Output format: text, json", "text")
-  .action(async (options: GlobalOptions) => {
-    const format = validateFormat(options.format);
-    const sessions = discoverSessions({
-      currentOnly: Boolean(options.current),
-    });
+  .action(async (options) => {
+    const { current, format } = normalizeGlobalOptions(options);
+    const sessions = discoverSessions({ currentOnly: current });
 
     if (sessions.length === 0) {
-      if (format === "json") {
-        printJson({ error: "no-sessions" });
-      } else {
-        console.log(
-          options.current
-            ? "No sessions found for current directory."
-            : "No sessions found."
-        );
-      }
+      if (format === "json") printJson({ error: "no-sessions" });
+      else console.log(current ? "No sessions found for current directory." : "No sessions found.");
       return;
     }
 
-    const [session] = sessions;
-
-    if (!session) {
-      if (format === "json") {
-        printJson({ error: "no-sessions" });
-      } else {
-        console.log(
-          options.current
-            ? "No sessions found for current directory."
-            : "No sessions found."
-        );
-      }
-      return;
-    }
+    const session = sessions[0];
+    if (!session) return;
 
     const usage = await parseSessionUsage(session.eventsJsonlPath);
-
     if (format === "json") {
       printJson({ session, usage });
       return;
@@ -164,8 +114,21 @@ program
   .command("tui")
   .description("Open Ink-based TUI.")
   .option("-c, --current", "Only show sessions related to current directory.")
-  .action((options: { current?: boolean }) => {
+  .action((options) => {
     runTui({ currentOnly: Boolean(options.current) });
   });
 
-program.parse(process.argv);
+// Handle default behavior
+if (process.argv.length <= 2) {
+  const isTTY = process.stdout.isTTY;
+  const isCI = process.env["CI"] === "true" || process.env["GITHUB_ACTIONS"] === "true";
+
+  if (isTTY && !isCI) {
+    runTui({ currentOnly: false });
+  } else {
+    // Fallback to list for scripts/CI
+    program.parse(["node", "copilot-aiu", "list"]);
+  }
+} else {
+  program.parse(process.argv);
+}

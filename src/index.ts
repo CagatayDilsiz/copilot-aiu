@@ -21,17 +21,23 @@ program
   )
   .version("0.0.10");
 
+function validateFormat(format: string | undefined): "text" | "json" {
+  if (format === "json") return "json";
+  return "text";
+}
+
 program
   .command("list", { isDefault: true })
   .description("List Copilot CLI sessions.")
   .option("-c, --current", "Only list sessions related to current directory.")
   .option("-f, --format <format>", "Output format: text, json", "text")
   .action((options: GlobalOptions) => {
+    const format = validateFormat(options.format);
     const sessions = discoverSessions({
       currentOnly: Boolean(options.current),
     });
 
-    if (options.format === "json") {
+    if (format === "json") {
       printJson(sessions);
       return;
     }
@@ -55,13 +61,14 @@ program
   .option("-c, --current", "Search only sessions related to current directory.")
   .option("-f, --format <format>", "Output format: text, json", "text")
   .action(async (idOrName: string, options: GlobalOptions) => {
+    const format = validateFormat(options.format);
     const sessions = discoverSessions({
       currentOnly: Boolean(options.current),
     });
     const result = findSessionByIdOrName(idOrName, sessions);
 
     if (result.status === "not-found") {
-      if (options.format === "json") {
+      if (format === "json") {
         printJson({ error: "not-found", query: idOrName });
       } else {
         console.log(`No session found for: ${idOrName}`);
@@ -70,7 +77,7 @@ program
     }
 
     if (result.status === "ambiguous") {
-      if (options.format === "json") {
+      if (format === "json") {
         printJson({ error: "ambiguous", query: idOrName, matches: result.matches });
       } else {
         console.log(`Ambiguous session query: ${idOrName}`);
@@ -84,7 +91,7 @@ program
     const [session] = result.matches;
 
     if (!session) {
-      if (options.format === "json") {
+      if (format === "json") {
         printJson({ error: "not-found", query: idOrName });
       } else {
         console.log(`No session found for: ${idOrName}`);
@@ -94,7 +101,7 @@ program
 
     const usage = await parseSessionUsage(session.eventsJsonlPath);
 
-    if (options.format === "json") {
+    if (format === "json") {
       printJson({ session, usage });
       return;
     }
@@ -109,12 +116,13 @@ program
   .option("-c, --current", "Use latest session related to current directory.")
   .option("-f, --format <format>", "Output format: text, json", "text")
   .action(async (options: GlobalOptions) => {
+    const format = validateFormat(options.format);
     const sessions = discoverSessions({
       currentOnly: Boolean(options.current),
     });
 
     if (sessions.length === 0) {
-      if (options.format === "json") {
+      if (format === "json") {
         printJson({ error: "no-sessions" });
       } else {
         console.log(
@@ -129,7 +137,7 @@ program
     const [session] = sessions;
 
     if (!session) {
-      if (options.format === "json") {
+      if (format === "json") {
         printJson({ error: "no-sessions" });
       } else {
         console.log(
@@ -143,7 +151,7 @@ program
 
     const usage = await parseSessionUsage(session.eventsJsonlPath);
 
-    if (options.format === "json") {
+    if (format === "json") {
       printJson({ session, usage });
       return;
     }

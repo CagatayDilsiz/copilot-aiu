@@ -1,6 +1,6 @@
 {
   "name": "copilot-aiu",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Analyze local GitHub Copilot CLI session usage, AI credits, token details, and mixed-model breakdowns.",
   "type": "module",
   "bin": {
